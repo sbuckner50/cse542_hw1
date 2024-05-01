@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from torch import distributions as pyd
 import torch.optim as optim
 from torch.distributions import Categorical
+from pdb import set_trace as debug
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-8
@@ -67,7 +68,6 @@ class PolicyGaussian(nn.Module):
         ac_dist = torch.distributions.Independent(torch.distributions.Normal(mu, std), reinterpreted_batch_ndims=1)
         return ac_dist.log_prob(action)
 
-# TODO: FILL THIS IN
 class PolicyAutoRegressiveModel(nn.Module):
     def __init__(self, num_inputs, num_outputs, hidden_dim=65, hidden_depth=2, num_buckets=10, ac_low=-1, ac_high=1):
         super(PolicyAutoRegressiveModel, self).__init__()
@@ -89,31 +89,31 @@ class PolicyAutoRegressiveModel(nn.Module):
         return return_val[:, dimension]
 
     def forward(self, state):
-        vals = []
-        log_probs = 0
+        vals = torch.tensor([]).to(device)
+        log_prob = torch.zeros(state.shape[0]).to(device)
         for j in range(self.num_dims):
-            # TODO start: Here, we want to predict each action one dimension at a time.
-            # For each action dimension j, concatenate state with all the previous action dimensions (0...j-1), pass it through
-            # the respective MLP (i.e. self.trunks[j]) to get a logit. Use the logit to create a categorical distribution (torch.Categorical).
-            # Sample from this distribution and get that sample's log probability. Add the log probability
-            # to the running log_probs and undiscretize the sample add append it to vals.
-            # Important - use previous *sampled* actions
-            continue # TODO: Remove this when running
-            # TODO end
-        vals = torch.cat(vals, dim=-1)
-        return vals, log_probs
+            input = torch.cat([state, vals], dim=-1)
+            act_logits = self.trunks[j](input)
+            act_dist = torch.distributions.Categorical(logits=act_logits)
+            act_sample = act_dist.sample()
+            act_logprob = act_dist.log_prob(act_sample)
+            act_cont = self.undiscretize(act_sample, j).reshape(-1, 1)
+            if j == 0:
+                vals = act_cont
+            else:
+                vals = torch.cat([vals, act_cont], dim=-1)
+            log_prob += act_logprob
+        return vals, log_prob
     
     def log_prob(self, state, action):
-        log_prob = 0.
+        log_prob = torch.zeros(action.shape[0]).to(device)
         ac_discretized = self.discretize(action)
         for j in range(self.num_dims):
-            # TODO start: Here, want to get log prob of action given state under the current autoregressive model.
-            # For each action dimension j, concatenate state with all the previous action dimensions (0...j-1), pass it through
-            # the respective MLP (i.e. self.trunks[j]) to get a logit. Use the logit to create a categorical distribution.
-            # Get the log prob of the respective discretized action (i.e. ac_discretized[:, j]) and add it to the running log_prob.
-            # Important - use previous actions from the action variable, *not* sampled actions
-            continue # TODO: Remove this when running
-            # TODO end
+            input = torch.cat([state, action[:,:j]], dim=-1)
+            act_logits = self.trunks[j](input)
+            act_dist = torch.distributions.Categorical(logits=act_logits)
+            act_logprob = act_dist.log_prob(ac_discretized[:,j])
+            log_prob += act_logprob
         return log_prob
 
 def rollout(

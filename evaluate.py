@@ -39,3 +39,5 @@ def evaluate(env, policy, agent_name, num_validation_runs=10, episode_length=50,
     print("Success rate: ", success_count/num_validation_runs)
     print("Average reward (success only): ", rewards_suc/max(success_count, 1))
     print("Average reward (all): ", rewards_all/num_validation_runs)
+    
+    return success_count/num_validation_runs, rewards_all/num_validation_runs
